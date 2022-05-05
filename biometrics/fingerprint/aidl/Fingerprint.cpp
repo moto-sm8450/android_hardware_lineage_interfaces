@@ -49,6 +49,17 @@ Fingerprint::Fingerprint(std::shared_ptr<FingerprintConfig> config)
         } else {
             mSensorType = FingerprintSensorType::UNDER_DISPLAY_OPTICAL;
         }
+        mUdfpsHandlerFactory = getUdfpsHandlerFactory();
+        if (!mUdfpsHandlerFactory) {
+            ALOGE("Can't get UdfpsHandlerFactory");
+        } else {
+            mUdfpsHandler = mUdfpsHandlerFactory->create();
+            if (!mUdfpsHandler) {
+                ALOGE("Can't create UdfpsHandler");
+            } else {
+                mUdfpsHandler->init(mDevice);
+            }
+        }
     } else if (sensorTypeProp == "side") {
         mSensorType = FingerprintSensorType::POWER_BUTTON;
     } else if (sensorTypeProp == "home") {
@@ -65,6 +76,9 @@ Fingerprint::Fingerprint(std::shared_ptr<FingerprintConfig> config)
 
 Fingerprint::~Fingerprint() {
     ALOGV("~Fingerprint()");
+    if (mUdfpsHandler) {
+        mUdfpsHandlerFactory->destroy(mUdfpsHandler);
+    }
     if (mDevice == nullptr) {
         ALOGE("No valid device");
         return;
@@ -220,7 +234,7 @@ ndk::ScopedAStatus Fingerprint::createSession(int32_t /*sensorId*/, int32_t user
                                               std::shared_ptr<ISession>* out) {
     CHECK(mSession == nullptr || mSession->isClosed()) << "Open session already exists!";
 
-    mSession = SharedRefBase::make<Session>(mDevice, userId, cb, mLockoutTracker);
+    mSession = SharedRefBase::make<Session>(mDevice, mUdfpsHandler, userId, cb, mLockoutTracker);
     *out = mSession;
 
     mSession->linkToDeath(cb->asBinder().get());

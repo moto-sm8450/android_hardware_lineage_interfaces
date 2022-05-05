@@ -21,9 +21,13 @@ void onClientDeath(void* cookie) {
     }
 }
 
-Session::Session(fingerprint_device_t* device, int userId, std::shared_ptr<ISessionCallback> cb,
-                 LockoutTracker lockoutTracker)
-    : mDevice(device), mLockoutTracker(lockoutTracker), mUserId(userId), mCb(cb) {
+Session::Session(fingerprint_device_t* device, UdfpsHandler* udfpsHandler, int userId,
+                 std::shared_ptr<ISessionCallback> cb, LockoutTracker lockoutTracker)
+    : mDevice(device),
+      mLockoutTracker(lockoutTracker),
+      mUserId(userId),
+      mCb(cb),
+      mUdfpsHandler(udfpsHandler) {
     mDeathRecipient = AIBinder_DeathRecipient_new(onClientDeath);
 
     auto path = std::format("/data/vendor_de/{}/fpdata/", userId);
@@ -123,14 +127,19 @@ ndk::ScopedAStatus Session::resetLockout(const HardwareAuthToken& /*hat*/) {
     return ndk::ScopedAStatus::ok();
 }
 
-ndk::ScopedAStatus Session::onPointerDown(int32_t /*pointerId*/, int32_t /*x*/, int32_t /*y*/,
-                                          float /*minor*/, float /*major*/) {
-    // Not implemented
+ndk::ScopedAStatus Session::onPointerDown(int32_t /*pointerId*/, int32_t x, int32_t y,
+                                          float minor, float major) {
+    if (mUdfpsHandler) {
+        mUdfpsHandler->onFingerDown(x, y, minor, major);
+    }
     return ndk::ScopedAStatus::ok();
 }
 
 ndk::ScopedAStatus Session::onPointerUp(int32_t /*pointerId*/) {
-    // Not implemented
+    if (mUdfpsHandler) {
+        mUdfpsHandler->onFingerUp();
+    }
+
     return ndk::ScopedAStatus::ok();
 }
 

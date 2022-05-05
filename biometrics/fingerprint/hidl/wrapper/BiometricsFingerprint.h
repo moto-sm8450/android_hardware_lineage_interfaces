@@ -16,6 +16,8 @@
 #include <hidl/Status.h>
 #include <log/log.h>
 
+#include "UdfpsHandler.h"
+
 namespace android {
 namespace hardware {
 namespace biometrics {
@@ -38,6 +40,7 @@ struct BiometricsFingerprint : public IBiometricsFingerprint,
                                public IBiometricsFingerprintClientCallback {
   public:
     BiometricsFingerprint();
+    ~BiometricsFingerprint();
 
     // Method to wrap legacy HAL with BiometricsFingerprint class
     static IBiometricsFingerprint* getInstance();
@@ -87,6 +90,8 @@ struct BiometricsFingerprint : public IBiometricsFingerprint,
   private:
     sp<V2_1::IBiometricsFingerprint> mService;
     sp<V2_1::IBiometricsFingerprintClientCallback> mClientCallback;
+    UdfpsHandlerFactory* mUdfpsHandlerFactory;
+    UdfpsHandler* mUdfpsHandler;
 };
 
 }  // namespace implementation

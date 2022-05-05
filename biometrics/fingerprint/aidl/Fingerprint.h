@@ -12,6 +12,7 @@
 #include "FingerprintConfig.h"
 #include "LockoutTracker.h"
 #include "Session.h"
+#include "UdfpsHandler.h"
 
 using ::aidl::android::hardware::biometrics::fingerprint::FingerprintSensorType;
 using ::aidl::android::hardware::biometrics::fingerprint::ISession;
@@ -41,6 +42,8 @@ class Fingerprint : public BnFingerprint {
     FingerprintSensorType mSensorType;
 
     fingerprint_device_t* mDevice;
+    UdfpsHandlerFactory* mUdfpsHandlerFactory;
+    UdfpsHandler* mUdfpsHandler;
 };
 
 }  // namespace aidl::android::hardware::biometrics::fingerprint
