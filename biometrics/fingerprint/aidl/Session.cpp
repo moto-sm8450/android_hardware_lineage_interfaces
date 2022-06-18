@@ -188,6 +188,10 @@ ndk::ScopedAStatus Session::setIgnoreDisplayTouches(bool /*shouldIgnore*/) {
 }
 
 ndk::ScopedAStatus Session::cancel() {
+    if (mUdfpsHandler) {
+        mUdfpsHandler->cancel();
+    }
+
     int ret = mDevice->cancel(mDevice);
 
     if (ret == 0) {
@@ -329,6 +333,9 @@ void Session::notify(const fingerprint_msg_t* msg) {
             AcquiredInfo result =
                     VendorAcquiredFilter(msg->data.acquired.acquired_info, &vendorCode);
             ALOGD("onAcquired(%hhd, %d)", result, vendorCode);
+            if (mUdfpsHandler) {
+                mUdfpsHandler->onAcquired(static_cast<int32_t>(result), vendorCode);
+            }
             mCb->onAcquired(result, vendorCode);
         } break;
         case FINGERPRINT_TEMPLATE_ENROLLING: {
