@@ -60,6 +60,15 @@ prop {
     api_name: "detect_interaction"
 }
 
+# whether support hidl compatibility (default: false)
+prop {
+    prop_name: "persist.vendor.fingerprint.hidl_compat"
+    type: Boolean
+    scope: Internal
+    access: ReadWrite
+    api_name: "hidl_compat"
+}
+
 # whether support display touch by hal (default: false)
 prop {
     prop_name: "persist.vendor.fingerprint.udfps.display_touch"

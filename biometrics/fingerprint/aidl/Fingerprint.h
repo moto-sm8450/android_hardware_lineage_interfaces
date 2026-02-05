@@ -8,6 +8,7 @@
 #pragma once
 
 #include <aidl/android/hardware/biometrics/fingerprint/BnFingerprint.h>
+#include <android/hardware/biometrics/fingerprint/2.1/IBiometricsFingerprint.h>
 
 #include "FingerprintConfig.h"
 #include "LockoutTracker.h"
@@ -18,6 +19,8 @@ using ::aidl::android::hardware::biometrics::fingerprint::FingerprintSensorType;
 using ::aidl::android::hardware::biometrics::fingerprint::ISession;
 using ::aidl::android::hardware::biometrics::fingerprint::ISessionCallback;
 using ::aidl::android::hardware::biometrics::fingerprint::SensorProps;
+using ::android::sp;
+using ::android::hardware::biometrics::fingerprint::V2_1::IBiometricsFingerprint;
 
 namespace aidl::android::hardware::biometrics::fingerprint {
 
@@ -42,6 +45,7 @@ class Fingerprint : public BnFingerprint {
     FingerprintSensorType mSensorType;
 
     fingerprint_device_t* mDevice;
+    sp<IBiometricsFingerprint> mService;
     UdfpsHandlerFactory* mUdfpsHandlerFactory;
     UdfpsHandler* mUdfpsHandler;
 };

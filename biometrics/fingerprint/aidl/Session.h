@@ -9,11 +9,14 @@
 
 #include <aidl/android/hardware/biometrics/fingerprint/BnSession.h>
 #include <aidl/android/hardware/biometrics/fingerprint/ISessionCallback.h>
+#include <android/hardware/biometrics/fingerprint/2.1/IBiometricsFingerprintClientCallback.h>
+#include <android/hardware/biometrics/fingerprint/2.1/IBiometricsFingerprint.h>
 #include <android/log.h>
 #include <hardware/fingerprint.h>
 #include <hardware/hardware.h>
 #include <log/log.h>
 
+#include "Legacy2Aidl.h"
 #include "LockoutTracker.h"
 #include "UdfpsHandler.h"
 
@@ -21,6 +24,16 @@ using ::aidl::android::hardware::biometrics::common::ICancellationSignal;
 using ::aidl::android::hardware::biometrics::common::OperationContext;
 using ::aidl::android::hardware::biometrics::fingerprint::PointerContext;
 using ::aidl::android::hardware::keymaster::HardwareAuthToken;
+using ::android::sp;
+using ::android::hardware::hidl_string;
+using ::android::hardware::hidl_vec;
+using ::android::hardware::Return;
+using ::android::hardware::Void;
+using ::android::hardware::biometrics::fingerprint::V2_1::FingerprintError;
+using ::android::hardware::biometrics::fingerprint::V2_1::RequestStatus;
+using ::android::hardware::biometrics::fingerprint::V2_1::FingerprintAcquiredInfo;
+using ::android::hardware::biometrics::fingerprint::V2_1::IBiometricsFingerprintClientCallback;
+using ::android::hardware::biometrics::fingerprint::V2_1::IBiometricsFingerprint;
 
 namespace aidl::android::hardware::biometrics::fingerprint {
 
@@ -28,7 +41,7 @@ void onClientDeath(void* cookie);
 
 class Session : public BnSession {
   public:
-    Session(fingerprint_device_t* device, UdfpsHandler* udfpsHandler, int userId,
+    Session(UdfpsHandler* udfpsHandler, int userId,
             std::shared_ptr<ISessionCallback> cb, LockoutTracker lockoutTracker);
     ndk::ScopedAStatus generateChallenge() override;
     ndk::ScopedAStatus revokeChallenge(int64_t challenge) override;
@@ -60,28 +73,24 @@ class Session : public BnSession {
     ndk::ScopedAStatus onPointerCancelWithContext(const PointerContext& context) override;
     ndk::ScopedAStatus setIgnoreDisplayTouches(bool shouldIgnore) override;
 
+    virtual uint64_t preEnrollImpl() { return 0; };
+    virtual void postEnrollImpl() {};
+    virtual int enrollImpl(const HardwareAuthToken& hat) { return 0; };
+    virtual int authenticateImpl(int64_t operationId) { return 0; };
+    virtual int enumerateImpl() { return 0; };
+    virtual int removeImpl(int32_t fid) { return 0; };
+    virtual uint64_t getAuthenticatorIdImpl() { return 0; };
+    virtual int cancelImpl() { return 0; };
+    virtual void notify(const fingerprint_msg_t* msg) {};
+
     ndk::ScopedAStatus cancel();
     binder_status_t linkToDeath(AIBinder* binder);
     bool isClosed();
-    void notify(const fingerprint_msg_t* msg);
 
-  private:
-    fingerprint_device_t* mDevice;
+  protected:
     LockoutTracker mLockoutTracker;
-    bool mClosed = false;
-
-    // static ndk::ScopedAStatus ErrorFilter(int32_t error);
-    static Error VendorErrorFilter(int32_t error, int32_t* vendorCode);
-    static AcquiredInfo VendorAcquiredFilter(int32_t info, int32_t* vendorCode);
 
     bool checkSensorLockout();
-    void clearLockout(bool clearAttemptCounter);
-    void startLockoutTimer(int64_t timeout);
-    void lockoutTimerExpired();
-
-    // lockout timer
-    bool mIsLockoutTimerStarted = false;
-    bool mIsLockoutTimerAborted = false;
 
     // The user ID for which this session was created.
     int32_t mUserId;
@@ -91,10 +100,98 @@ class Session : public BnSession {
     // Practically, it means that this callback should always be called from the worker thread.
     std::shared_ptr<ISessionCallback> mCb;
 
+    UdfpsHandler* mUdfpsHandler;
+
+  private:
+    bool mClosed = false;
+    void clearLockout(bool clearAttemptCounter);
+    void startLockoutTimer(int64_t timeout);
+    void lockoutTimerExpired();
+
+    // lockout timer
+    bool mIsLockoutTimerStarted = false;
+    bool mIsLockoutTimerAborted = false;
+
     // Binder death handler.
     AIBinder_DeathRecipient* mDeathRecipient;
+};
 
+class SessionHardware : public Session {
+  public:
+    SessionHardware(fingerprint_device_t* device, UdfpsHandler* udfpsHandler,
+                    int userId, std::shared_ptr<ISessionCallback> cb,
+                    LockoutTracker lockoutTracker);
+    uint64_t preEnrollImpl() override;
+    void postEnrollImpl() override;
+    int enrollImpl(const HardwareAuthToken& hat) override;
+    int authenticateImpl(int64_t operationId) override;
+    int enumerateImpl() override;
+    int removeImpl(int32_t fid) override;
+    uint64_t getAuthenticatorIdImpl() override;
+    int cancelImpl() override;
+    void notify(const fingerprint_msg_t* msg) override;
+
+  private:
+    fingerprint_device_t* mDevice;
+
+    // static ndk::ScopedAStatus ErrorFilter(int32_t error);
+    static Error VendorErrorFilter(int32_t error, int32_t* vendorCode);
+    static AcquiredInfo VendorAcquiredFilter(int32_t info, int32_t* vendorCode);
+};
+
+class SessionHidlCallback;
+
+class SessionHidl : public Session {
+  public:
+    SessionHidl(IBiometricsFingerprint* service, UdfpsHandler* udfpsHandler, int userId,
+                std::shared_ptr<ISessionCallback> cb, LockoutTracker lockoutTracker);
+    uint64_t preEnrollImpl() override;
+    void postEnrollImpl() override;
+    int enrollImpl(const HardwareAuthToken& hat) override;
+    int authenticateImpl(int64_t operationId) override;
+    int enumerateImpl() override;
+    int removeImpl(int32_t fid) override;
+    uint64_t getAuthenticatorIdImpl() override;
+    int cancelImpl() override;
+
+  private:
+    friend SessionHidlCallback;
+    IBiometricsFingerprint* mService;
+    sp<SessionHidlCallback> mClientCallback;
+    int32_t RequestStatusToInt(RequestStatus error);
+};
+
+class SessionHidlCallback : public IBiometricsFingerprintClientCallback {
+   public:
+    SessionHidlCallback(SessionHidl* session,
+                        std::shared_ptr<ISessionCallback> cb,
+                        LockoutTracker tracker, UdfpsHandler* udfpsHandler)
+        : mSession(session), mCb(cb), mLockoutTracker(tracker), mUdfpsHandler(udfpsHandler) {};
+
+    // Methods from
+    // ::android::hardware::biometrics::fingerprint::V2_1::IBiometricsFingerprintClientCallback
+    // follow.
+    Return<void> onEnrollResult(uint64_t deviceId, uint32_t fingerId, uint32_t groupId,
+                                uint32_t remaining) override;
+    Return<void> onAcquired(uint64_t deviceId, FingerprintAcquiredInfo acquiredInfo,
+                            int32_t vendorCode) override;
+    Return<void> onAuthenticated(uint64_t deviceId, uint32_t fingerId, uint32_t groupId,
+                                 const hidl_vec<uint8_t>& token) override;
+    Return<void> onError(uint64_t deviceId, FingerprintError error, int32_t vendorCode) override;
+    Return<void> onRemoved(uint64_t deviceId, uint32_t fingerId, uint32_t groupId,
+                           uint32_t remaining) override;
+    Return<void> onEnumerate(uint64_t deviceId, uint32_t fingerId, uint32_t groupId,
+                             uint32_t remaining) override;
+
+   private:
+    SessionHidl* mSession;
+    std::shared_ptr<ISessionCallback> mCb;
+    LockoutTracker mLockoutTracker;
     UdfpsHandler* mUdfpsHandler;
+
+    // static ndk::ScopedAStatus ErrorFilter(int32_t error);
+    Error VendorErrorFilter(FingerprintError error, int32_t* vendorCode);
+    AcquiredInfo VendorAcquiredFilter(FingerprintAcquiredInfo acquiredInfo);
 };
 
 }  // namespace aidl::android::hardware::biometrics::fingerprint

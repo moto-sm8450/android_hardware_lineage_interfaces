@@ -33,12 +33,17 @@ Fingerprint::Fingerprint(std::shared_ptr<FingerprintConfig> config)
     : mConfig(std::move(config)) {
     sInstance = this;  // keep track of the most recent instance
 
-    if (mDevice) {
-        ALOGI("fingerprint HAL already opened");
+    auto hidlCompat = mConfig->get<bool>("hidl_compat");
+    if (hidlCompat) {
+        mService = IBiometricsFingerprint::getService();
     } else {
-        mDevice = openHal();
-        if (!mDevice) {
-            ALOGE("Can't open any fingerprint HAL module");
+        if (mDevice) {
+            ALOGI("fingerprint HAL already opened");
+        } else {
+            mDevice = openHal();
+            if (!mDevice) {
+                ALOGE("Can't open any fingerprint HAL module");
+            }
         }
     }
 
@@ -232,7 +237,12 @@ ndk::ScopedAStatus Fingerprint::createSession(int32_t /*sensorId*/, int32_t user
                                               std::shared_ptr<ISession>* out) {
     CHECK(mSession == nullptr || mSession->isClosed()) << "Open session already exists!";
 
-    mSession = SharedRefBase::make<Session>(mDevice, mUdfpsHandler, userId, cb, mLockoutTracker);
+    auto hidlCompat = mConfig->get<bool>("hidl_compat");
+    if (hidlCompat) {
+        mSession = SharedRefBase::make<SessionHidl>(mService, mUdfpsHandler, userId, cb, mLockoutTracker);
+    } else {
+        mSession = SharedRefBase::make<SessionHardware>(mDevice, mUdfpsHandler, userId, cb, mLockoutTracker);
+    }
     *out = mSession;
 
     mSession->linkToDeath(cb->asBinder().get());

@@ -10,7 +10,11 @@
 
 #include <hardware/hw_auth_token.h>
 
+#include <hidl/HidlSupport.h>
+
 #include <endian.h>
+
+using ::android::hardware::hidl_array;
 
 namespace aidl::android::hardware::biometrics::fingerprint {
 
@@ -36,6 +40,13 @@ inline void translate(const hw_auth_token_t& hat,
                     be32toh(hat.authenticator_type));
     authToken.timestamp.milliSeconds = be64toh(hat.timestamp);
     authToken.mac.insert(authToken.mac.begin(), std::begin(hat.hmac), std::end(hat.hmac));
+}
+
+inline void translate(const ::aidl::android::hardware::keymaster::HardwareAuthToken& authToken,
+                      hidl_array<uint8_t, 69>& hidlToken) {
+    hw_auth_token_t token;
+    translate(authToken, token);
+    hidlToken = hidl_array<uint8_t, 69>((uint8_t *) &token);
 }
 
 }  // namespace aidl::android::hardware::biometrics::fingerprint
